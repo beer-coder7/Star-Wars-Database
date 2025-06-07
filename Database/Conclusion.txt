@@ -1,0 +1,3 @@
+S jazykem SQL jsem už trochu uměl před touto semestrální prací, to stejné s databázemi, ale tento projekt mi umožnil, kreativně pracovat na vlastní malé databázi a rozšířit si znalosti. 
+S výběrem tématu jsem spokojen, dělal jsem databázi, která mě svým obsahem zajímá. Také jsem si kvůli tomu data generoval ručně a podlé mých znalostí o tématu. Není to nejlepší nápad a už to příště neudělám. 
+Naučil jsem se pracovat s DataGripem a DBS portálem, tvořit konceptuální schéma, dělat návrh databáze, relační algebru a spoustu dalších věci.
