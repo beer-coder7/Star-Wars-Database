@@ -1,10 +1,414 @@
-Kolik je planet v sektoru Barma sector?
-Jakým vlastníkům patřilo plavidlo Millennium Falcon?
-Jaké planety jsou obývané rasou Gungan a Human?
-Jaké rasy obydlují všechny planety v regionu Core Worlds? (Type D - Universal quantification query)
-Jaké všechny významné osobnosti ovlivnili pouze událost Clone Wars? (Type C - Select those related only to...)
-Jaké události se stali v éře Age of Rebellion?
-Jaké důležité osobnosti se narodili na planetě Tatooine nebo Coruscant?
-Jaká vesmírná plavidla nebo droidy vlastnil Han Solo?
-Jaké významné osobnosti jsou Force sensitive a používají světelný meč?
-Jaké druhy fauny žijí na planetě Dagobah?
+1. Kolik planet je v sektoru Arkanis sector?
+SQL:
+  SELECT COUNT(*)
+  FROM planet
+  WHERE sector = 'Arkanis sector';
+
+
+2. Jméno a příjmení vlastníků, kterým patřilo plavidlo Millennium Falcon?
+RA:
+  {spaceship(name='Millennium Falcon')*>important_figure_spaceship*>important_figure}[firstname, surname]
+SQL:
+  SELECT firstname, surname
+  FROM important_figure
+  JOIN (
+      SELECT id_spaceship, id_figure, year_acquired
+      FROM important_figure_spaceship
+      JOIN (
+          SELECT id_spaceship
+          FROM spaceship
+          WHERE name = 'Millennium Falcon'
+      ) USING (id_spaceship)
+  ) USING (id_figure);
+
+
+3. Jména planet, které jsou obývané rasou Gungan nebo Human?
+RA:
+  {race[race.id_race=race_planet.id_race]race_planet[race_planet.id_planet=planet.id_planet]planet}
+  (race.name = 'Gungan' ∨ race.name = 'Human')[planet.name->planet_name]
+SQL:
+  SELECT DISTINCT p.name AS planet_name
+  FROM planet p
+  JOIN race_planet USING (id_planet)
+  JOIN race r USING (id_race)
+  WHERE r.name = 'Gungan' OR r.name = 'Human';
+
+
+4. Jaké rasy obydlují **všechny** planety v regionu Core Worlds?
+RA:
+  {{race_planet[id_race, id_planet]÷planet(region='Core Worlds')[id_planet]}*race}[race.name]
+SQL:
+  SELECT r.name
+  FROM (
+      -- Všechny rasy, co obydují nějakou planetu
+      SELECT id_race
+      FROM (
+          SELECT id_race, id_planet
+          FROM race_planet
+      )
+
+      -- Bez těch co NEosidlují nějakou planetu v Core Worlds regionu
+      EXCEPT
+
+      SELECT id_race
+      FROM (
+          -- Všechny kombinace rasa x planeta (v Core Worlds)
+          SELECT id_race, id_planet
+          FROM (
+              SELECT id_race
+              FROM (
+                  SELECT id_race, id_planet
+                  FROM race_planet
+              )
+          )
+          CROSS JOIN (
+              SELECT id_planet
+              FROM planet
+              WHERE region = 'Core Worlds'
+          )
+
+          -- Bez těch co opravdu existují v záznamu
+          EXCEPT
+
+          SELECT id_race, id_planet
+          FROM race_planet
+      ) -- Zůstavá rasa, která NEosiduje nějakou planetu v Core Worlds
+  )
+  JOIN race r USING (id_race);
+
+
+5. Kontrola dotazu D1 (Jaké rasy obydlují **všechny** planety v regionu Core Worlds?)
+  SELECT *
+  FROM planet
+  WHERE region = 'Core Worlds'
+
+  EXCEPT
+
+  SELECT p.*
+  FROM planet p JOIN race_planet USING(id_planet) JOIN race USING(id_race)
+  WHERE race.name = 'Human' AND p.region = 'Core Worlds';
+  -- Should return empty set
+
+
+6. Významé osobnosti, které ovlivnili **pouze** událost Clone Wars?
+RA:
+  {{important_figure_event * event(name='Clone Wars')}*>important_figure}
+  \
+  {{important_figure_event * event(name!='Clone Wars')}*>important_figure}
+SQL:
+  SELECT i.*
+  FROM important_figure i
+  JOIN important_figure_event ife USING (id_figure)
+  JOIN event e USING (id_event)
+  WHERE e.name = 'Clone Wars'
+
+  EXCEPT
+
+  SELECT i.*
+  FROM important_figure i
+  JOIN important_figure_event ife USING (id_figure)
+  JOIN event e USING (id_event)
+  WHERE e.name != 'Clone Wars';
+
+
+7. Jaké události se stali v éře Age of Rebellion?
+RA:
+  era(name = 'Age of Rebellion')[era.id_era = event.id_era>event
+SQL:
+  SELECT *
+  FROM event
+  WHERE EXISTS (
+      SELECT 1
+      FROM (
+        SELECT *
+        FROM era
+        WHERE name = 'Age of Rebellion'
+      ) R1
+      WHERE R1.id_era = event.id_era
+  );
+
+
+8. Jaké důležité osobnosti se narodili na planetě Tatooine nebo Coruscant?
+RA:
+  important_figure(home_planet = 'Tatooine' ∨ home_planet = 'Coruscant')
+SQL:
+  SELECT *
+  FROM important_figure
+  WHERE home_planet = 'Tatooine' OR home_planet = 'Coruscant';
+
+
+9. Jména vesmírných plavidel nebo droidů, které vlastnil Anakin Skywalker?
+RA:
+  {important_figure_spaceship*spaceship*important_figure}(important_figure.firstname = 'Anakin' ∧ important_figure.surname = 'Skywalker')[spaceship.name]
+  ∪
+  {important_figure_droid*droid*important_figure}(important_figure.firstname = 'Anakin' ∧ important_figure.surname = 'Skywalker')[droid.name]
+SQL:
+  SELECT s.name
+  FROM important_figure i1
+  JOIN important_figure_spaceship USING (id_figure)
+  JOIN spaceship s USING (id_spaceship)
+  WHERE i1.firstname = 'Anakin' AND i1.surname = 'Skywalker'
+
+  UNION
+
+  SELECT d.name
+  FROM important_figure i2
+  JOIN important_figure_droid USING (id_figure)
+  JOIN droid d USING (id_droid)
+  WHERE i2.firstname = 'Anakin' AND i2.surname = 'Skywalker';
+
+
+10. Jaké významné osobnosti jsou Force sensitive a používají světelný meč?
+RA:
+  force_sensitive(uses_lightsaber='true')*>important_figure
+SQL:
+  SELECT i.*
+  FROM force_sensitive JOIN important_figure i USING (id_figure)
+  WHERE force_sensitive.uses_lightsaber = TRUE;
+
+
+11. Jaké druhy fauny žijí na planetě Zeffo? (Jméno fauny)
+RA:
+  {planet_living_thing*planet(name='Zeffo')}*>fauna
+SQL:
+  SELECT DISTINCT fauna.*
+  FROM planet_living_thing
+  JOIN planet ON planet.id_planet = planet_living_thing.id_planet
+  JOIN fauna ON fauna.id_living = planet_living_thing.id_living
+  WHERE planet.name = 'Zeffo';
+
+
+12. Seřadit planety podle populace.
+SQL:
+  SELECT *
+  FROM Planet
+  WHERE population IS NOT NULL
+  ORDER BY population DESC;
+
+
+13. Kolik událostí ovlivnila jaká osobnost? (A setřídit sestupně.)
+SQL:
+  SELECT firstname, surname, event_count
+  FROM important_figure
+  JOIN (
+      SELECT id_figure, COUNT(*) AS event_count
+      FROM important_figure_event
+      GROUP BY id_figure) USING(id_figure)
+  ORDER BY event_count DESC;
+
+
+14. Najdi osobnosti, které nejsou force sensitive. (Všechny atrubuty, setřídit podle id vzestupně)
+RA:
+  force_sensitive!*>important_figure
+SQL:
+  SELECT *
+  FROM important_figure i
+  WHERE id_figure NOT IN (
+      SELECT id_figure FROM force_sensitive
+  )
+  ORDER BY i.id_figure ASC;
+
+  SELECT *
+  FROM important_figure i
+  WHERE NOT EXISTS (
+      SELECT 1 FROM force_sensitive f WHERE i.id_figure = f.id_figure
+  )
+  ORDER BY i.id_figure ASC;
+
+  SELECT *
+  FROM important_figure
+  EXCEPT
+  SELECT i.*
+  FROM important_figure i
+  JOIN force_sensitive USING(id_figure)
+  ORDER BY id_figure ASC;
+
+
+15. Vypište všechny planety a pokud existují, tak k nim rostliny, které na nich rostou nebo zvířata, která na nich žijou.
+SQL:
+  SELECT p.name AS name_planet, name_fauna, name_flora
+  FROM planet p
+  FULL JOIN planet_living_thing plt
+      ON p.id_planet = plt.id_planet
+  FULL JOIN living_thing l
+      ON l.id_living = plt.id_living
+  LEFT JOIN fauna ON fauna.id_living = l.id_living
+  LEFT JOIN flora ON flora.id_living = l.id_living;
+
+
+16. Vypiš jméno a příjmení všech důležitých osob a k nim počet droidů, které za život vlastnili. (Setřiď sestupně.)
+SQL:
+  SELECT firstname, surname, (SELECT COUNT(*) FROM important_figure_droid ifd WHERE ifd.id_figure = i.id_figure) as owning_count
+  FROM important_figure i
+  ORDER BY owning_count DESC;
+
+
+17. Vyber významné osoby, které ovlivnili událost Clone Wars a zároveň událost Order 66. (Jméno a příjmení. Dále také jejich rok narození a úmrtí a pokud není záznam, nahraď slovem 'unknown')
+SQL:
+  SELECT
+    i.firstname,
+    i.surname,
+    COALESCE(i.birth::text, 'unknown') AS birth,
+    COALESCE(i.death::text, 'unknown') AS death
+  FROM important_figure i
+  JOIN important_figure_event USING(id_figure)
+  JOIN event e USING(id_event)
+  WHERE e.name = 'Clone Wars'
+
+  INTERSECT
+
+  SELECT
+    i.firstname,
+    i.surname,
+    COALESCE(i.birth::text, 'unknown') AS birth,
+    COALESCE(i.death::text, 'unknown') AS death
+  FROM important_figure i
+  JOIN important_figure_event USING(id_figure)
+  JOIN event e USING(id_event)
+  WHERE e.name = 'Order 66';
+
+
+18. Vypiš všechny osoby, co se narodili na Kamino a určitě už zemřeli. (Pohled)
+SQL:
+  CREATE OR REPLACE VIEW kaminoans AS
+  SELECT *
+  FROM important_figure i
+  WHERE i.home_planet = 'Kamino'
+  WITH CHECK OPTION;
+
+  BEGIN;
+      SELECT * FROM kaminoans WHERE death IS NOT NULL;
+
+  ROLLBACK;
+
+
+19. Palpatine se naklonoval a i přesto, že zemřel v epizodě VI, tak se znovu objevil...
+
+Napiš insert do pohledu important_figure_to_change, kde bude palpatinův klon, který bude mít nové id_figure. Dále bude mít id_race, firstname, surname podle původního Palpatina.
+A nakonec atributy birth: NULL, death: 35 ABY, home_planet: Kamino.
+Dále oba vypiš.
+
+Oh, povedlo se nám zjistit, kdy se tento jeho klon narodil. Bylo to 4 ABY. To musíme upravit.
+
+Nakonec ho ale z databáze radši odstraníme (co kdyby to někoho zmátlo).
+
+SQL:
+  -- Vytvoř pohled
+  CREATE OR REPLACE VIEW important_figure_to_change AS
+  SELECT *
+  FROM important_figure
+  WITH CHECK OPTION;
+
+  -- Začni transakci
+  BEGIN;
+      -- Vlož do tabulky klona
+      INSERT INTO important_figure_to_change (id_race, firstname, surname, birth, death, home_planet)
+      SELECT id_race, firstname, surname, NULL, 35, 'Kamino'
+      FROM important_figure_to_change
+      WHERE firstname = 'Sheev' AND surname = 'Palpatine';
+
+      -- Zkontroluj jestli se povedlo
+      SELECT *
+      FROM important_figure_to_change
+      WHERE firstname = 'Sheev' AND surname = 'Palpatine';
+
+      -- Změn datum narození na 4 ABY
+      UPDATE important_figure_to_change
+      SET birth = 4
+      WHERE id_figure IN (
+          SELECT id_figure
+          FROM important_figure_to_change
+          WHERE firstname = 'Sheev' AND surname = 'Palpatine' AND home_planet = 'Kamino'
+      );
+
+      -- Zkontroluj jestli se povedlo
+      SELECT *
+      FROM important_figure_to_change
+      WHERE firstname = 'Sheev' AND surname = 'Palpatine';
+
+      -- Odstraň klona z tabulky
+      DELETE FROM important_figure_to_change
+      WHERE id_figure IN (
+          SELECT id_figure
+          FROM important_figure_to_change
+          WHERE firstname = 'Sheev' AND surname = 'Palpatine' AND home_planet = 'Kamino'
+      );
+
+      -- Zkontroluj jestli se povedlo    
+      SELECT *
+      FROM important_figure_to_change
+      WHERE firstname = 'Sheev' AND surname = 'Palpatine';
+
+  -- Vrať vše do původního stavu
+  ROLLBACK;
+
+
+20. Pro každý sektor vypiš jeho populaci, ale jen pokud zde žije více než 1.000.000 živých stvoření a setřiď podle názvu sektoru sestupně. (Neznámé sektory nahraď společným: 'Unknown Sector'.)
+SQL:
+  SELECT COALESCE(sector::text, 'Unknown Sector') AS sector, sum(population) AS population
+  FROM planet
+  WHERE population IS NOT NULL
+  GROUP BY sector
+  HAVING sum(population) >= 1000000
+  ORDER BY sector DESC;
+
+
+21. Vypiš jaké všechny rasy jsou nadřazené Twi'lek.
+SQL:
+  SELECT r_sup.name AS superior, r_inf.name AS inferior
+  FROM race_race rr
+  JOIN race r_sup ON rr.superiority_id_race = r_sup.id_race
+  JOIN race r_inf ON rr.inferiority_id_race = r_inf.id_race
+  WHERE r_inf.name = 'Twi''lek';
+
+
+22. Vyber rostliny, které rostou v regionu Outer Rim Territories.
+RA:
+  {planet(region='Outer Rim Territories')
+  *planet_living_thing
+  *flora}
+  [name, region, name_flora, primary_color, grow_height, preferred_climate]
+SQL:
+  SELECT p.name, p.region, f.name_flora, f.primary_color, f.grow_height, f.preferred_climate
+  FROM planet p
+  JOIN planet_living_thing USING (id_planet)
+  JOIN flora f USING (id_living)
+  WHERE p.region = 'Outer Rim Territories';
+
+
+23. Osoby, které ovlivnili nějaké události v éře Fall of the Old Republic.
+RA:
+  era(era.name='Fall of the Old Republic')[era.id_era=event.id_era]event
+  *important_figure_event*>important_figure
+SQL:
+  -- Distinct je tady potřeba kvůli duplicitám
+  SELECT DISTINCT i.*
+  FROM important_figure i
+  JOIN important_figure_event USING (id_figure)
+  JOIN event USING (id_event)
+  JOIN era USING (id_era)
+  WHERE era.name = 'Fall of the Old Republic';
+
+
+24. Nejvíce osídlená planeta.
+SQL:
+  SELECT name, population
+  FROM planet
+  ORDER BY COALESCE(population, 0) DESC
+  LIMIT 1;
+
+
+25. Které důležité osoby vlastnili alespoň jednu loď i droida?
+SQL:
+  SELECT DISTINCT i.firstname, i.surname
+  FROM important_figure i
+  WHERE
+  i.id_figure IN (
+      SELECT ifd.id_figure
+      FROM important_figure_droid ifd
+  )
+  AND
+  i.id_figure IN (
+      SELECT ifs.id_figure
+      FROM important_figure_spaceship ifs
+  );
