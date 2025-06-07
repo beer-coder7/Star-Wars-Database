@@ -1,0 +1,5 @@
+* https://starwars.fandom.com/
+* https://chatgpt.com/
+* https://www.w3schools.com/sql/
+* https://users.fit.cvut.cz/~hunkajir/dbs2/main.xml
+* https://courses.fit.cvut.cz/BI-DBS/index.html
